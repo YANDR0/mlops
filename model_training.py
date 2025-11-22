@@ -1,51 +1,61 @@
 import torch
 from torch import nn, optim
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, Subset
-import random
+from torchvision import datasets, transforms, models
+from torch.utils.data import DataLoader
 
-transform = transforms.Compose([
-    transforms.Resize((64, 64)),
+IMG_SIZE = 128
+BATCH_SIZE = 32
+LR = 0.001
+PATIENCE = 3
+EPOCHS = 50
+
+transform_train = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(10),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+    transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
-train_data = datasets.ImageFolder("data/train", transform=transform)
-test_data  = datasets.ImageFolder("data/test",  transform=transform)
+transform_test = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
 
-train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
-test_loader  = DataLoader(test_data,  batch_size=32, shuffle=False)
+train_data = datasets.ImageFolder("data/train", transform=transform_train)
+test_data  = datasets.ImageFolder("data/test",  transform=transform_test)
 
-print("Data readed")
+train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
+test_loader  = DataLoader(test_data,  batch_size=BATCH_SIZE, shuffle=False)
 
-class CNN(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Conv2d(3, 16, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Flatten(),
-            nn.Linear(64 * 8 * 8, 128), nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, len(train_data.classes)),
-            nn.LogSoftmax(dim=1)
-        )
+print("Data loaded successfully.")
+print("Classes:", train_data.classes)
 
-    def forward(self, x):
-        return self.net(x)
+model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
 
-model = CNN()
-criterion = nn.NLLLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+for param in model.parameters():
+    param.requires_grad = False
+
+model.fc = nn.Sequential(
+    nn.Linear(model.fc.in_features, 128),
+    nn.ReLU(),
+    nn.Dropout(0.3),
+    nn.Linear(128, len(train_data.classes))
+)
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.fc.parameters(), lr=LR, weight_decay=1e-4)
 
 best_acc = 0
-patience = 10
 wait = 0
 
-print("Model training")
+print("Training started...")
 
-for epoch in range(100):
+for epoch in range(EPOCHS):
+
     model.train()
     for X, y in train_loader:
         optimizer.zero_grad()
@@ -55,6 +65,7 @@ for epoch in range(100):
 
     model.eval()
     correct, total = 0, 0
+
     with torch.no_grad():
         for X, y in test_loader:
             pred = model(X).argmax(dim=1)
@@ -62,15 +73,17 @@ for epoch in range(100):
             total += y.size(0)
 
     acc = 100 * correct / total
-    print(f"Epoch {epoch+1} - Val accuracy: {acc:.2f}%")
+    print(f"Epoch {epoch+1}/{EPOCHS} - Val Accuracy: {acc:.2f}%")
 
     if acc > best_acc:
         best_acc = acc
-        torch.save(model.state_dict(), "best_model.pth")
         wait = 0
+        torch.save(model.state_dict(), "best_model.pth")
     else:
         wait += 1
-        if wait == patience:
+        if wait >= PATIENCE:
+            print("Early stopping.")
             break
 
-print(f"Best accuracy: {best_acc:.2f}%")
+print(f"\nTraining complete. Best accuracy: {best_acc:.2f}%")
+
