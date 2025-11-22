@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 import torch
 from torchvision import transforms, models
 from PIL import Image
@@ -20,6 +21,14 @@ model.fc = nn.Sequential(
 model.load_state_dict(torch.load("best_model.pth", map_location="cpu"))
 model.eval()
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción deberías poner la IP específica, pero "*" sirve para probar
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 transform = transforms.Compose([
     transforms.Resize((128, 128)),

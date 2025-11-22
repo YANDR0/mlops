@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clasificador de Mascotas</title>
+    <!-- Fuentes e Iconos -->
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
+    <!-- Estilos de Vuetify -->
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.5.0/dist/vuetify.min.css" rel="stylesheet">
+    <style>
+        .preview-box {
+            border: 2px dashed #ccc;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f9f9f9;
+        }
+        .result-card {
+            transition: all 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <v-app>
+            <v-app-bar color="blue-darken-3" density="compact">
+                <v-app-bar-title>Detector de Perros y Gatos</v-app-bar-title>
+            </v-app-bar>
+
+            <v-main class="bg-grey-darken-4">
+                <v-container>
+                    <v-row justify="center">
+                        <v-col cols="12" md="8" lg="6">
+                            <!-- Tarjeta Principal (Estilo Dark) -->
+                            <v-card class="pa-4 elevation-12 bg-grey-darken-3">
+                                <v-card-title class="text-center text-h5 font-weight-bold text-white">
+                                    Sube tu foto
+                                </v-card-title>
+                                <v-card-subtitle class="text-center mb-4 text-grey-lighten-1">
+                                    El modelo dirá si es un Gato o un Perro
+                                </v-card-subtitle>
+
+                                <v-file-input
+                                    v-model="files"
+                                    label="Seleccionar imagen..."
+                                    accept="image/*"
+                                    prepend-icon="mdi-camera"
+                                    variant="outlined"
+                                    theme="dark"
+                                    @update:model-value="onFileChange"
+                                    :disabled="loading"
+                                ></v-file-input>
+
+                                <!-- Previsualización de imagen -->
+                                <div v-if="imagePreview" class="text-center my-4">
+                                    <v-img
+                                        :src="imagePreview"
+                                        max-height="300"
+                                        contain
+                                        class="rounded border"
+                                    ></v-img>
+                                </div>
+                                <!-- Caja vacía (placeholder) cuando no hay imagen -->
+                                <div v-else class="preview-box rounded mb-4 bg-grey-darken-4" style="border-color: #555;">
+                                    <span class="text-grey">Sin imagen seleccionada</span>
+                                </div>
+
+                                <!-- Botón de predicción -->
+                                <v-btn
+                                    block
+                                    color="blue-darken-2"
+                                    size="large"
+                                    class="text-white font-weight-bold"
+                                    @click="predictImage"
+                                    :loading="loading"
+                                    :disabled="!files || files.length === 0"
+                                >
+                                    Analizar Imagen
+                                    <v-icon end>mdi-send</v-icon>
+                                </v-btn>
+
+                                <!-- Resultados -->
+                                <v-expand-transition>
+                                    <!-- CAMBIO: Usamos spanishPrediction en lugar de result.prediction -->
+                                    <v-card v-if="result" class="mt-4 py-4 result-card" :color="resultColor" variant="flat">
+                                        <v-card-text class="text-center">
+                                            <!-- Texto Gigante en Español -->
+                                            <div class="text-h2 font-weight-black text-uppercase" style="letter-spacing: 2px;">
+                                                {{ spanishPrediction }}
+                                            </div>
+                                            
+                                            <!-- CAMBIO: Eliminamos la línea de "Confianza: %" -->
+                                            
+                                            <!-- Icono Gigante -->
+                                            <v-icon size="80" class="mt-3">
+                                                {{ resultIcon }}
+                                            </v-icon>
+                                        </v-card-text>
+                                    </v-card>
+                                </v-expand-transition>
+
+                                <!-- Mensaje de Error -->
+                                <v-alert
+                                    v-if="error"
+                                    type="error"
+                                    variant="tonal"
+                                    closable
+                                    class="mt-4"
+                                    @click:close="error = null"
+                                >
+                                    {{ error }}
+                                </v-alert>
+
+                            </v-card>
+                        </v-col>
+                    </v-row>
+                </v-container>
+            </v-main>
+        </v-app>
+    </div>
+
+    <!-- Vue 3 y Vuetify Scripts -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.5.0/dist/vuetify.min.js"></script>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+        const { createVuetify } = Vuetify;
+
+        const vuetify = createVuetify({
+            theme: { defaultTheme: 'dark' }
+        });
+
+        createApp({
+            setup() {
+                const files = ref(null);
+                const imagePreview = ref(null);
+                const result = ref(null);
+                const loading = ref(false);
+                const error = ref(null);
+
+                const onFileChange = (fileArray) => {
+                    result.value = null;
+                    error.value = null;
+                    if (fileArray && fileArray.length > 0) {
+                        imagePreview.value = URL.createObjectURL(fileArray[0]);
+                    } else {
+                        imagePreview.value = null;
+                    }
+                };
+
+                const predictImage = async () => {
+                    if (!files.value || files.value.length === 0) return;
+
+                    loading.value = true;
+                    error.value = null;
+                    result.value = null;
+
+                    const formData = new FormData();
+                    formData.append('file', files.value[0]);
+
+                    try {
+                        // Usamos 127.0.0.1 para asegurar compatibilidad local
+                        const response = await fetch('http://127.0.0.1:8000/predict', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Error del servidor: ${response.statusText}`);
+                        }
+
+                        const data = await response.json();
+                        result.value = data; 
+
+                    } catch (err) {
+                        console.error(err);
+                        error.value = "No se pudo conectar con la API. Asegúrate de que uvicorn esté corriendo.";
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                // CAMBIO: Lógica para traducir el resultado
+                const spanishPrediction = computed(() => {
+                    if (!result.value) return '';
+                    const pred = result.value.prediction.toLowerCase();
+                    if (pred === 'dog') return 'PERRO';
+                    if (pred === 'cat') return 'GATO';
+                    return pred; // Fallback por si acaso
+                });
+
+                const resultColor = computed(() => {
+                    if (!result.value) return '';
+                    // Usamos colores un poco más oscuros/intensos para el tema dark
+                    return result.value.prediction.toLowerCase() === 'dog' ? 'blue-darken-4' : 'orange-darken-4';
+                });
+
+                const resultIcon = computed(() => {
+                    if (!result.value) return '';
+                    return result.value.prediction.toLowerCase() === 'dog' ? 'mdi-dog' : 'mdi-cat';
+                });
+
+                return {
+                    files,
+                    imagePreview,
+                    result,
+                    loading,
+                    error,
+                    onFileChange,
+                    predictImage,
+                    resultColor,
+                    resultIcon,
+                    spanishPrediction // Exportamos la nueva variable calculada
+                };
+            }
+        }).use(vuetify).mount('#app');
+    </script>
+</body>
+</html>

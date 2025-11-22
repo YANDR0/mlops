@@ -29,3 +29,13 @@ Al menos en postman, la solicitud es:
 * value `La foto xd`
 
 `curl -X POST -F "file=@foto.jpg" http://localhost:8000/predict`
+
+## Frontend
+
+El Frontend se ejecuta con:
+
+`python -m http.server 8080`
+
+Puedes probar que funcione con:
+* http://localhost:8080/
+
