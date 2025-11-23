@@ -2,11 +2,12 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# --- 1. SECURITY GROUP ---
+# --- 1. SECURITY GROUP (Actualizado: HTTP + ICMP) ---
 resource "aws_security_group" "ml_sg" {
-  name        = "ml_inference_sg"
-  description = "Allow SSH and API traffic"
+  name        = "ml_inference_sg_v2"
+  description = "Allow SSH, API (5000), HTTP (80) and ICMP"
 
+  # SSH
   ingress {
     from_port   = 22
     to_port     = 22
@@ -14,10 +15,27 @@ resource "aws_security_group" "ml_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # API Backend (Puerto 5000)
   ingress {
     from_port   = 5000
     to_port     = 5000
     protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # HTTP Frontend/Nginx (Puerto 80)
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # ICMP (Ping)
+  ingress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -29,8 +47,7 @@ resource "aws_security_group" "ml_sg" {
   }
 }
 
-# --- 2. GET UBUNTU IMAGE (Safe Method) ---
-# This ensures you get a valid Free Tier AMI automatically
+# --- 2. DATA SOURCE UBUNTU ---
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
@@ -46,27 +63,26 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# --- 3. THE INSTANCES ---
+# --- 3. BACKEND INSTANCES (6 Nodos - t3.small) ---
 resource "aws_instance" "ml_node" {
   count         = 6
-  ami           = data.aws_ami.ubuntu.id  # <--- Uses the safe AMI found above
-  instance_type = "t3.micro"              # <--- MUST BE t2.micro FOR FREE TIER
-  
-  # !!! UPDATE THESE TWO LINES !!!
-  key_name      = "mlproject"             # Name from AWS Console
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.small"  # <--- Backend ahora es t3.small
+  key_name      = "mlproject" 
   
   vpc_security_group_ids = [aws_security_group.ml_sg.id]
   user_data              = file("setup_script.sh")
 
   tags = {
-    Name = "ML-Inference-Node-${count.index}"
+    Name = "ML-Backend-Node-${count.index}"
+    Role = "Backend"
   }
 
-  # --- 4. UPLOAD & RUN ---
+  # Provisión de archivos y arranque de API
   connection {
     type        = "ssh"
     user        = "ubuntu"
-    private_key = file("/Users/renata_temer/Downloads/mlproject.pem") 
+    private_key = file("C:/Users/migue/Downloads/mlproject.pem") 
     host        = self.public_ip
   }
 
@@ -82,13 +98,75 @@ resource "aws_instance" "ml_node" {
 
   provisioner "remote-exec" {
     inline = [
-      "sleep 120", # Wait longer for t2.micro to install everything
+      "sleep 120", 
       "cd /home/ubuntu/app",
       "nohup uvicorn main:app --host 0.0.0.0 --port 5000 > app.log 2>&1 &"
     ]
   }
 }
 
-output "node_ips" {
-  value = aws_instance.ml_node[*].public_ip
+# --- 4. NGINX INSTANCE (1 Nodo - t3.micro - LIMPIA) ---
+resource "aws_instance" "nginx_lb" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.micro"
+  key_name      = "mlproject"
+
+  vpc_security_group_ids = [aws_security_group.ml_sg.id]
+  
+  # SIN user_data: Se configurará manualmente.
+  
+  tags = {
+    Name = "ML-Nginx-LoadBalancer"
+    Role = "LoadBalancer"
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("C:/Users/migue/Downloads/mlproject.pem")
+    host        = self.public_ip
+  }
+}
+
+# --- 5. FRONTEND INSTANCE (1 Nodo - t3.micro - LIMPIA) ---
+resource "aws_instance" "frontend_app" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.micro"
+  key_name      = "mlproject"
+
+  vpc_security_group_ids = [aws_security_group.ml_sg.id]
+  
+  tags = {
+    Name = "ML-Frontend-App"
+    Role = "Frontend"
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("C:/Users/migue/Downloads/mlproject.pem")
+    host        = self.public_ip
+  }
+}
+
+# --- 6. OUTPUTS ---
+output "backend_ips" {
+  description = "IPs Públicas de los 6 nodos Backend (t3.small)"
+  value       = aws_instance.ml_node[*].public_ip
+}
+
+output "nginx_lb_ip" {
+  description = "IP Pública para configurar Nginx manualmente."
+  value       = aws_instance.nginx_lb.public_ip
+}
+
+output "frontend_ip" {
+  description = "IP Pública de la instancia Frontend"
+  value       = aws_instance.frontend_app.public_ip
+}
+
+# Output extra útil: IPs privadas de los backends para copiarlas a tu nginx.conf manual
+output "backend_private_ips" {
+  description = "IPs PRIVADAS de los backends (Úsalas en tu upstream de Nginx manual)"
+  value       = aws_instance.ml_node[*].private_ip
 }
