@@ -39,3 +39,13 @@ El Frontend se ejecuta con:
 Puedes probar que funcione con:
 * http://localhost:8080/
 
+# TO DO
+
+- [x] Modelo generado y entrenado
+- [x] Api creada y funcionando en local
+- [x] Single page funcionando en local
+- [x] Nodos creados y con autobalanceo
+- [ ] Investigar que más falta
+- [ ] Hostear el proyecto de git en los nodos
+- [ ] Hacer el documento (No digan que "Lo hago yo", ayuden con la arquitectura)
+
