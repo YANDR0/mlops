@@ -1,0 +1,10 @@
+FROM nginx:stable-alpine
+
+# Remove default content and copy single frontend file
+RUN rm -rf /usr/share/nginx/html/*
+COPY frontend.html /usr/share/nginx/html/frontend.html
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+
+#docker compose up --build -d
