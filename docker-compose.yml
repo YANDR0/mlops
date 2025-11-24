@@ -13,8 +13,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Optional: set a URL to download the model at container start
-      # MODEL_URL: "https://.../best_model.pth"
+      MODEL_URL: "https://us-east-1.console.aws.amazon.com/s3/object/tarea22-mlops?region=us-east-1&prefix=best_model.pth"
       PYTHONUNBUFFERED: "1"
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:8000/ || exit 1" ]

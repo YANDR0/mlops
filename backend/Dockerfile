@@ -1,13 +1,28 @@
-FROM pytorch/pytorch:2.2.0-cpu
+FROM python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Install lightweight HTTP client for downloading model if needed
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+
+# Install system deps and lightweight HTTP client for downloading model if needed
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+	build-essential \
+	curl \
+	ca-certificates \
+	libglib2.0-0 \
+	libsm6 \
+	libxrender1 \
+	libxext6 \
  && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python deps (if you add or change requirements)
+# Copy requirements and install Python deps. Install PyTorch CPU wheels from official index.
 COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Install torch + torchvision CPU wheels from the PyTorch index then install other requirements
+RUN pip install --no-cache-dir "torch==2.2.0+cpu" "torchvision==0.15.2+cpu" -f https://download.pytorch.org/whl/cpu/torch_stable.html || \
+	pip install --no-cache-dir torch torchvision
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application code and entrypoint
