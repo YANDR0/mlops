@@ -4,3 +4,9 @@
 .terraform.lock.hcl
 *.pem
 __pycache__/
+best_model.pth
+*.pth
+/.venv
+env/
+.env
+venv/

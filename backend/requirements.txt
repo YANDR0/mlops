@@ -1,5 +1,6 @@
-fastapi==0.95.0
-uvicorn[standard]==0.23.2
 torch==2.2.0
 torchvision==0.15.2
+fastapi==0.95.0
+uvicorn[standard]==0.23.2
+# torch and torchvision are provided by the base image (pytorch/pytorch:2.2.0-cpu)
 pillow==9.5.0

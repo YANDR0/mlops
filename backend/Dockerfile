@@ -1,24 +1,23 @@
-FROM python:3.10-slim
-
-# Install system deps for pillow/torch if needed
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libglib2.0-0 \
-    libsm6 \
-    libxrender1 \
-    libxext6 \
- && rm -rf /var/lib/apt/lists/*
+FROM pytorch/pytorch:2.2.0-cpu
 
 WORKDIR /app
 
-# Copy only requirements first for better caching
+# Install lightweight HTTP client for downloading model if needed
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python deps (if you add or change requirements)
 COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy application code and model
+# Copy application code and entrypoint
 COPY main.py /app/main.py
-COPY best_model.pth /app/best_model.pth
+COPY backend/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Model file can be mounted or downloaded at container start using MODEL_URL env var
+VOLUME ["/app/model"]
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/entrypoint.sh"]
